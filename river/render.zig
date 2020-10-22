@@ -66,6 +66,12 @@ pub fn renderOutput(output: *Output) void {
 
     // If we have a fullscreen view to render, render it.
     if (fullscreen_view) |view| {
+        // Try direct scanout
+        if (directScanoutView(output.*, view)) {
+            _ = c.wlr_output_commit(output.wlr_output);
+            return;
+        }
+
         // Always clear with solid black for fullscreen
         c.wlr_renderer_clear(wlr_renderer, &[_]f32{ 0, 0, 0, 1 });
         renderView(output.*, view, &now);
@@ -180,6 +186,42 @@ fn renderView(output: Output, view: *View, now: *c.timespec) void {
 
         view.forEachSurface(renderSurfaceIterator, &rdata);
     }
+}
+
+fn countSurfaceIterator(
+    surface: ?*c.wlr_surface,
+    surface_x: c_int,
+    surface_y: c_int,
+    data: ?*c_void,
+) callconv(.C) void {
+    var count = util.voidCast(c_int, data.?);
+    count.* += 1;
+}
+
+fn directScanoutView(output: Output, view: *View) bool {
+    // Some things must be rendered "above" fullscreen views,
+    // in which case direct scanout is not possible.
+    if (build_options.xwayland) {
+        if (output.root.xwayland_unmanaged_views.first != null) return false;
+    }
+    if (output.layers[c.ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY].first != null) return false;
+    if (output.root.drag_icons.first != null) return false;
+
+    // A view with multiple surfaces must be composited.
+    var surface_count: c_int = 0;
+    view.forEachSurface(countSurfaceIterator, &surface_count);
+    if (surface_count > 1) return false;
+
+    // If scale, transform or dimensions do not match,
+    // the view must be composited.
+    const surface: *c.wlr_surface = view.wlr_surface orelse return false;
+    const wlr_output = output.wlr_output;
+    if (@intToFloat(f32, surface.current.scale) != wlr_output.scale or
+        surface.current.transform != wlr_output.transform) return false;
+
+    _ = c.wlr_output_attach_buffer(wlr_output, &surface.buffer.*.base);
+
+    return true;
 }
 
 fn renderDragIcons(output: Output, now: *c.timespec) void {
