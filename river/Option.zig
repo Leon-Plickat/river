@@ -55,6 +55,7 @@ link: wl.list.Link = undefined,
 output: ?*Output,
 key: [*:0]const u8,
 value: Value,
+output_default: bool = false,
 
 event: struct {
     /// Emitted whenever the value of the option changes.
@@ -144,6 +145,9 @@ fn handleRequest(handle: *zriver.OptionHandleV1, request: zriver.OptionHandleV1.
         .set_fixed_value => |req| self.set(.{ .fixed = req.value }) catch unreachable,
         .set_string_value => |req| self.set(.{ .string = req.value }) catch {
             handle.getClient().postNoMemory();
+        },
+        .set_output_default => if (self.output == null) {
+            self.output_default = true;
         },
     }
 }

@@ -152,22 +152,36 @@ pub fn init(self: *Self, root: *Root, wlr_output: *wlr.Output) !void {
         };
     }
 
-    // Set the default title of this output
-    var buf: ["river - ".len + wlr_output.name.len + 1]u8 = undefined;
-    const default_title = fmt.bufPrintZ(&buf, "river - {}", .{mem.spanZ(&wlr_output.name)}) catch unreachable;
-    self.setTitle(default_title);
-
-    // Create all default output options
+    var title_option: ?*Option = null;
+    var have_layout_option = false;
     const options_manager = &root.server.options_manager;
-    self.layout_option = try Option.create(options_manager, self, "layout", .{ .string = null });
-    const title_option = try Option.create(options_manager, self, "output_title", .{ .string = default_title.ptr });
-    _ = try Option.create(options_manager, self, "main_amount", .{ .uint = 1 });
-    _ = try Option.create(options_manager, self, "main_factor", .{ .fixed = wl.Fixed.fromDouble(0.6) });
-    _ = try Option.create(options_manager, self, "view_padding", .{ .uint = 10 });
-    _ = try Option.create(options_manager, self, "outer_padding", .{ .uint = 10 });
+    var it = options_manager.options.iterator(.forward);
+    while (it.next()) |option| {
+        if (option.output_default) {
+            const opt = try Option.create(options_manager, self, option.key, option.value);
 
+            if (opt.value == .string) {
+                if (std.cstr.cmp(option.key, "output_title") == 0) {
+                    title_option = opt;
+                } else if (std.cstr.cmp(option.key, "layout") == 0) {
+                    have_layout_option = true;
+                    self.layout_option = opt;
+                }
+            }
+        }
+    }
+
+    if (title_option == null) {
+        var buf: ["river - ".len + wlr_output.name.len + 1]u8 = undefined;
+        const default_title = fmt.bufPrintZ(&buf, "river - {}", .{mem.spanZ(&wlr_output.name)}) catch unreachable;
+        title_option = try Option.create(options_manager, self, "output_title", .{ .string = default_title.ptr });
+    }
+    self.setTitle(title_option.?.value.string.?);
+    title_option.?.event.update.add(&self.output_title);
+
+    if (!have_layout_option)
+        self.layout_option = try Option.create(options_manager, self, "layout", .{ .string = null });
     self.layout_option.event.update.add(&self.layout_change);
-    title_option.event.update.add(&self.output_title);
 }
 
 pub fn getLayer(self: *Self, layer: zwlr.LayerShellV1.Layer) *std.TailQueue(LayerSurface) {

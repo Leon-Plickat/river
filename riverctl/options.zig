@@ -52,6 +52,7 @@ pub fn declareOption(display: *wl.Display, globals: *Globals) !void {
     const args = Args(3, &[_]FlagDef{
         .{ .name = "-output", .kind = .arg },
         .{ .name = "-focused-output", .kind = .boolean },
+        .{ .name = "-output-default", .kind = .boolean },
     }).parse(argv[2..]);
 
     const key = args.positionals[0];
@@ -66,8 +67,14 @@ pub fn declareOption(display: *wl.Display, globals: *Globals) !void {
     else
         null;
 
+    const default = args.boolFlag("-output-default");
+    if (default and output != null)
+        root.printErrorExit("Only global options can be output defaults", .{});
+
     const options_manager = globals.options_manager orelse return error.RiverOptionsManagerNotAdvertised;
     const handle = try options_manager.getOptionHandle(key, if (output) |o| o.wl_output else null);
+
+    if (default) handle.setOutputDefault();
 
     switch (value_type) {
         .int => setIntValueRaw(handle, raw_value),

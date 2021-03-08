@@ -62,6 +62,15 @@
       </description>
     </request>
 
+    <request name="set_output_default">
+      <description summary="make option default for new outputs">
+        This request marks the option as a default option for new outputs. This
+        means it and its value will get copied for every new output.
+
+        Calling this request on non global options is invalid and will be ignored.
+      </description>
+    </request>
+
     <event name="unset">
       <description summary="the option is currently unset">
         The option with this key has never been set, so the first set_*_value
